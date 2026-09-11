@@ -83,9 +83,16 @@
 ## 四、双向反馈标准文案
 
 ### 1. 提交给 WorkBuddy 官方团队
-> **标题**：【Bug报告】OpenAI兼容自定义模型遇到残缺tool_calls时整轮崩溃 (TypeError: undefined.split)  
-> **问题定位**：客户端内置的 `PowerShell` / `Bash` 工具执行器在提取 `command` 参数时未做防御性空值校验，遇到缺失 `command` 的 arguments 时直接 `.split()` 导致崩溃。  
-> **修复建议**：在提取 `command` 后增加前置判断：若 `typeof command !== 'string'`，直接抛出用户友好的参数缺失提示并请求重试，避免客户端硬崩溃。
+#### 意见 1：【Bug报告】OpenAI兼容自定义模型遇到残缺tool_calls时整轮崩溃 (TypeError: undefined.split)  
+> **问题定位**：客户端内置的 `PowerShell` / `Bash` 工具执行器在提取 `command` 参数时未做防御性空值校验，遇到缺失 `command` 的 arguments 时直接 `.split()` 导致崩溃（Error Code 10000）。  
+> **修复建议**：在提取 `command` 后增加前置防御性校验：若 `typeof command !== 'string'`，不要执行 `.split()`，而是直接向模型回传错误或补充默认空指令重试，避免前端硬崩溃中断会话。
+
+#### 意见 2：【架构建议】长上下文压缩（Auto-Compact）导致 Thinking 块签名损坏与假死死锁
+> **问题定位**：客户端在长会话触发 `auto_compact` 上下文压缩修剪时，对最新 assistant 历史消息中的思考内容（`thinking` 块）进行了总结或截断，破坏了上游加密签名（`thoughtSignature`）。上游服务（如 Gemini 3.7 / 3.8）严格校验思考签名，检测到篡改后直接返回 `400 INVALID_ARGUMENT (thinking blocks in the latest assistant message cannot be modified)`。客户端在收到 400 时误判为常规失败并死循环重试，导致界面无响应长久转圈（假死）。  
+> **修复建议**：
+> 1. 上下文压缩机制应遵循上游签名规范：对最新 assistant 消息中的 `thinking` 块做**只读保护（Read-only Bypass）**，禁止截断或摘要，保持原样字节回传；
+> 2. 对非最新轮次的早期思考过程，在回传时应主动彻底剥离，而非半截篡改；
+> 3. 增强单轮工具调用输入输出的截流保护（Trimming），避免单轮大文件读取直接打穿 1M 上限。
 
 ### 2. 提交给反代项目官方（gemini-web2api / antigravity-manager）
 > **标题**：[Bug/Enhancement] Ensure tool_calls arguments strictly contain schema-required fields for Gemini Flash  
