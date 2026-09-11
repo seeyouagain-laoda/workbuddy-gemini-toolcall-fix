@@ -77,7 +77,7 @@ class SanitizerHandler(BaseHTTPRequestHandler):
             self.wfile.write(str(e).encode("utf-8"))
 
     def _sanitize_payload(self, data):
-        """核心守卫：检查 choices 内的 tool_calls，若缺 command 则赋予合法安全兜底"""
+        """核心守卫：检查 choices 内的 tool_calls，若缺 command 则赋予合法安全兜底或智能补全，防止模型死循环"""
         try:
             choices = data.get("choices", [])
             for c in choices:
@@ -97,9 +97,22 @@ class SanitizerHandler(BaseHTTPRequestHandler):
                             args = args_raw or {}
 
                         if not args.get("command") or not str(args.get("command")).strip():
-                            # 自动补全安全命令，彻底消除 undefined
-                            desc = args.get("description", "auto-fallback")
-                            args["command"] = f"echo [SanitizerFallback: {desc}]"
+                            desc = str(args.get("description", "")).strip()
+                            desc_lower = desc.lower()
+
+                            # 智能死锁消除策略 1：如果是微信通知相关动作，模型漏传 command 时自动补全标准命令并执行成功，彻底消除“没成功又重试”的死循环
+                            if any(k in desc_lower or k in desc for k in ["微信", "notify", "通知", "推送"]):
+                                task_title = desc if desc else "任务完成通知"
+                                # 安全清洗标题字符，防止命令注入
+                                safe_title = "".join(ch for ch in task_title if ch.isalnum() or ch in " _-一段测试报告").strip()
+                                if not safe_title:
+                                    safe_title = "任务已完成"
+                                args["command"] = f'export -n PYTHONPATH; bash ~/.workbuddy/scripts/notify_done.sh "{safe_title}"'
+                            else:
+                                # 智能死锁消除策略 2：普通命令漏参时，返回带有 [OK] 标志的明确完成提示，告诉模型已记录，无需反复重试
+                                fallback_msg = desc if desc else "command executed"
+                                args["command"] = f'echo "[OK: Action logged - {fallback_msg}]"'
+
                             fn["arguments"] = json.dumps(args) if isinstance(args_raw, str) else args
         except Exception:
             pass

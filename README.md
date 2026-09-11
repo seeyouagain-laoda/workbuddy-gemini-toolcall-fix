@@ -94,10 +94,50 @@
 > 2. 对非最新轮次的早期思考过程，在回传时应主动彻底剥离，而非半截篡改；
 > 3. 增强单轮工具调用输入输出的截流保护（Trimming），避免单轮大文件读取直接打穿 1M 上限。
 
+#### 意见 3：【死锁防护】工具调用漏参兜底不应诱发模型无限盲目重试
+> **问题定位**：当模型偶发漏传必填参数（如漏发 `command`）时，若下游兜底直接返回无意义的占位符（如 `[Fallback]`），模型推理判定为未达预期，而在注意力分散的下一轮中往往再次漏参，形成「漏参 -> 兜底无意义 -> 模型再次重试漏参」的高频死锁死循环，导致界面卡顿并迅速消耗 Token。  
+> **修复建议**：
+> 1. 客户端在检测到 schema 参数缺失时，应在单轮内明确中断并告知模型具体缺失的字段，而非静默盲试；
+> 2. 清洗层与客户端工具执行器应引入**重试熔断器（Max Retry Breaker）**，同一工具调用连续 2 次参数异常时强制截断并要求用户接入或退回纯文本回答。
+
 ### 2. 提交给反代项目官方（gemini-web2api / antigravity-manager）
 > **标题**：[Bug/Enhancement] Ensure tool_calls arguments strictly contain schema-required fields for Gemini Flash  
 > **问题描述**：Gemini Flash 在长上下文或复杂 prompt 场景下，返回的 function call arguments 偶发仅包含 `description` 而缺少必填的实际执行命令字段。  
 > **建议改动**：反代服务在封装为 OpenAI `tool_calls` 结构时，应增加必填字段合规性校验或填充兜底占位值，避免下游兼容客户端抛出解析异常。
+
+---
+
+## 守护与自启动 (Systemd 守护)
+
+为确保飞牛 NAS 重启或宿主机断电恢复后服务永不掉线，推荐通过 systemd 系统级托管：
+
+```ini
+# /etc/systemd/system/wb-sanitizer.service
+[Unit]
+Description=WorkBuddy ToolCall Sanitizer Proxy
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=半夏
+WorkingDirectory=/home/半夏/wb_sanitizer
+ExecStart=/usr/bin/python3 /home/半夏/wb_sanitizer/sanitizer_proxy.py
+Restart=always
+RestartSec=3
+StandardOutput=append:/home/半夏/wb_sanitizer/sanitizer.log
+StandardError=append:/home/半夏/wb_sanitizer/sanitizer.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
+启停命令：
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable wb-sanitizer.service
+sudo systemctl start wb-sanitizer.service
+```
 
 ---
 
