@@ -104,6 +104,19 @@
 > **标题**：[Bug/Enhancement] Ensure tool_calls arguments strictly contain schema-required fields for Gemini Flash  
 > **问题描述**：Gemini Flash 在长上下文或复杂 prompt 场景下，返回的 function call arguments 偶发仅包含 `description` 而缺少必填的实际执行命令字段。  
 > **建议改动**：反代服务在封装为 OpenAI `tool_calls` 结构时，应增加必填字段合规性校验或填充兜底占位值，避免下游兼容客户端抛出解析异常。
+> **已提交**：2026-09-11 已向 `lbjlaq/Antigravity-Manager` 开 Issue **[#3430](https://github.com/lbjlaq/Antigravity-Manager/issues/3430)**（截至 2026-09-12 复核仍 OPEN）。本中间件即该 Issue 的临时兜底方案。
+
+---
+
+## 五、已提交官方 Issue 与同类问题排查（2026-09-12 更新）
+
+基于官方仓库近 400 条 Issue（316 open / 84 closed）关键词聚类，对社区高频报错逐一实测排查：
+
+- ✅ **tool_calls 缺 command**（本仓库已根治）：清洗层自动注入安全占位，彻底消除 `undefined.split` 崩溃。
+- ❌ **thought_signature 400（#3313）**：实测 `gemini-3.7-flash` / `gemini-3.8-flash-high` **多轮**工具调用在 antigravity-manager 4.7.0 下均稳定返回 200，未命中，当前版本已规避。
+- ❌ **/v1/responses 非标准丢失函数调用（#3303）**：本方案客户端走 `/v1/chat/completions`，不涉及 `/v1/responses`，不命中。
+- ❌ **Claude Anthropic 私有协议慢 / 空参（#3393）**：以 OpenAI 格式接入时不走 Anthropic 私有协议层，不命中。
+- ⚠️ **地域封锁 400 / 生图被拦 / 429-503 限流**（官方头号痛点，命中数 114 / 55 / 15-63）：同根于上游 Google 地域策略与共享账号池，非本中间件职责范围，需账号池剔除持续报错账号或换住宅代理根治。
 
 ---
 
