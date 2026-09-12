@@ -104,7 +104,7 @@
 > **标题**：[Bug/Enhancement] Ensure tool_calls arguments strictly contain schema-required fields for Gemini Flash  
 > **问题描述**：Gemini Flash 在长上下文或复杂 prompt 场景下，返回的 function call arguments 偶发仅包含 `description` 而缺少必填的实际执行命令字段。  
 > **建议改动**：反代服务在封装为 OpenAI `tool_calls` 结构时，应增加必填字段合规性校验或填充兜底占位值，避免下游兼容客户端抛出解析异常。
-> **已提交**：2026-09-11 已向 `lbjlaq/Antigravity-Manager` 开 Issue **[#3430](https://github.com/lbjlaq/Antigravity-Manager/issues/3430)**（截至 2026-09-12 复核仍 OPEN）。本中间件即该 Issue 的临时兜底方案。
+> **已提交**：2026-09-11 开 Issue **[#3430](https://github.com/lbjlaq/Antigravity-Manager/issues/3430)**，官方已于 **v4.7.1**（commit `d93be1a0` `fix(proxy): sanitize and fallback missing command`）**修复并关闭**（2026-09-12）。本中间件作为纵深防御保留。
 
 ---
 
