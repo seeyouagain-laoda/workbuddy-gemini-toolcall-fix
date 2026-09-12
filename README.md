@@ -154,5 +154,30 @@ sudo systemctl start wb-sanitizer.service
 
 ---
 
+## 六、修复状态（2026-09-12 更新）
+
+> 结论：**已修复，不再崩溃。** 但问题成因与残留风险须说明清楚（见下）。
+
+### ✅ 已修复
+- **tool_calls 缺 `command` 导致 `undefined.split` 白屏崩溃（#3430）**：上游 `antigravity-manager` **v4.7.1**（commit `d93be1a0`，`fix(proxy): sanitize and fallback missing command in tool_calls`）在 `response.rs` + `streaming.rs` 双路径对命令类工具自动注入安全占位 `echo "[OK: Action logged - <desc>]"`，**已从反代源头修复并关闭 Issue**。
+- **NAS OpenClaw 侧**：反代容器已原地升级并 **pin `v4.7.1`**（容器 `581f96a6…`），走原生修复，根除。
+- **WorkBuddy 侧**：5 条反代模型改指 **8046 清洗层 v1.1**（commit `b5de39d`：意图补全 + 熔断器 + systemd 自启），与上游构成**双保险**；实际已不再崩溃。
+- **死循环重试**：上游 `[OK]` 占位 + 8046 连续 2 次熔断 + 微信真发，打断「漏参→占位→重试」链路。
+
+### ⚠️ 残留问题（必须讲清，未被本次修复覆盖）
+1. **WB 客户端 5.5.6 `custom-local` name 未守卫 `.split()` 回归**：反代/清洗层只从 arguments 维度兜底，未触及 WB `tool.invoke` 内 `name.split("__")` 客户端代码缺陷。当前靠 8046 清洗（残缺 tool_call 不再产出）+ agent 默认模型用内置 Gemini 绕开；**仍需官方 5.5.7+ 修**。
+2. **模型偶发漏参本身未被消灭**：v4.7.1 只是「兜底占位」而非「让模型永不漏参」，长上下文下理论上仍可能漏，但已无害化（占位命令）。
+3. **白名单外命令工具名**：反代白名单仅 10 个命令执行类（shell/bash/powershell/terminal/cmd/run_command/execute_command/…），非标准命令工具名漏参反代不洗，但 WB 端已不再裸 split，风险极低。
+4. **地域封锁 400 / 生图被拦 / 429-503 限流**：上游 Google 地域策略 + 共享账号池通病，**非反代 bug、本次未覆盖**，需账号池剔除报错账号或换住宅代理。
+5. **thoughtSignature 400 死循环**：WB 客户端 auto-compact 篡改 thinking 块签名所致，非反代问题；已写入官方反馈（read-only bypass thinking 块），待客户端修。
+
+### 📌 版本号清单
+- `antigravity-manager` **v4.7.1** · commit `d93be1a0` · 2026-09-12 · fixes #3430
+- NAS 反代容器 pin `v4.7.1`（容器 `581f96a6…`）
+- WB 8046 清洗层 `sanitizer_proxy.py` **v1.1** · commit `b5de39d`
+- GitHub 仓库 `seeyouagain-laoda/workbuddy-gemini-toolcall-fix`（public，含 README / sanitizer_proxy.py / LICENSE）
+
+---
+
 ## License
 MIT License
